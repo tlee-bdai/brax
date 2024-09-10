@@ -37,7 +37,7 @@ class ParametricDistribution(abc.ABC):
     """
     self._param_size = param_size
     self._postprocessor = postprocessor
-    self._event_ndims = event_ndims  # rank of events
+    self._event_ndims = event_ndims  # rank of eventspython how to make wrapper class
     self._reparametrizable = reparametrizable
     assert event_ndims in [0, 1]
 
@@ -114,6 +114,24 @@ class NormalDistribution:
     entropy = 0.5 + log_normalization
     return entropy * jnp.ones_like(self.loc)
 
+class CategoricalDistribution:
+  """Categorical distribution."""
+
+  def __init__(self, logits):
+    self.logits = logits
+
+  def sample(self, seed):
+    return jax.random.categorical(seed, logits=self.logits, keepdim=True)
+
+  def mode(self):
+    return jnp.argmax(self.logits, axis=-1)
+
+  def log_prob(self, x):
+    return jnp.take_along_axis(self.logits, jnp.expand_dims(x, axis=-1), axis=-1)
+
+  def entropy(self):
+    return - self.logits * jnp.log(self.logits)
+
 
 class TanhBijector:
   """Tanh Bijector."""
@@ -126,6 +144,17 @@ class TanhBijector:
 
   def forward_log_det_jacobian(self, x):
     return 2. * (jnp.log(2.) - x - jax.nn.softplus(-2. * x))
+
+class Identity:
+  def forward(self, x):
+    return x
+  
+  def inverse(self, x):
+    return x
+  
+  def forward_log_det_jacobian(self, x):
+    return x * 0.0
+
 
 
 class NormalTanhDistribution(ParametricDistribution):
@@ -158,3 +187,15 @@ class NormalTanhDistribution(ParametricDistribution):
     loc, scale = jnp.split(parameters, 2, axis=-1)
     scale = (jax.nn.softplus(scale) + self._min_std) * self._var_scale
     return NormalDistribution(loc=loc, scale=scale)
+
+
+class ParametricCategoricalDistribution(ParametricDistribution):
+  """Categorical Distribution with Softmax"""
+
+  def __init__(self, event_size):
+    super().__init__(param_size=event_size, postprocessor=Identity(), event_ndims=1,reparametrizable=True )
+
+  def create_dist(self, parameters):
+    return CategoricalDistribution(jax.nn.softmax(parameters))
+
+  
