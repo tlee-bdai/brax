@@ -405,11 +405,9 @@ def train(
     training_state = training_state.replace(
         normalizer_params=normalizer_params, params=init_params
     )
-
   training_state = jax.device_put_replicated(
       training_state,
       jax.local_devices()[:local_devices_to_use])
-
   if not eval_env:
     eval_env = environment
   if randomization_fn is not None:
@@ -474,6 +472,7 @@ def train(
           (training_state.normalizer_params, training_state.params)
       )
       policy_params_fn(current_step, make_policy, params)
+
 
   total_steps = current_step
   assert total_steps >= num_timesteps

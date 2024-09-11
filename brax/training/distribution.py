@@ -75,7 +75,6 @@ class ParametricDistribution(abc.ABC):
     """Compute the log probability of actions."""
     dist = self.create_dist(parameters)
     log_probs = dist.log_prob(actions)
-    print("log_probs", log_probs.shape)
     log_probs -= self._postprocessor.forward_log_det_jacobian(actions)
     if self._event_ndims == 1:
       log_probs = jnp.sum(log_probs, axis=-1)  # sum over action dimension
@@ -139,7 +138,6 @@ class CategoricalDistribution:
     return out
 
   def log_prob(self, x):
-    print(x.shape, self.logits.shape)
     idx = jnp.argmax(x, axis=-1)
     return jnp.take_along_axis(self.logits, jnp.expand_dims(idx, axis=-1), axis=-1)
 
