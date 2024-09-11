@@ -67,7 +67,7 @@ def make_ppo_networks(
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
     value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
     activation: networks.ActivationFn = linen.swish,
-    discrete_action: False) -> PPONetworks:
+    discrete_action = False) -> PPONetworks:
   """Make PPO networks with preprocessor."""
   if discrete_action:
     parametric_action_distribution = distribution.ParametricCategoricalDistribution(event_size=action_size)

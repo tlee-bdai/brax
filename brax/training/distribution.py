@@ -75,6 +75,7 @@ class ParametricDistribution(abc.ABC):
     """Compute the log probability of actions."""
     dist = self.create_dist(parameters)
     log_probs = dist.log_prob(actions)
+    print("log_probs", log_probs.shape)
     log_probs -= self._postprocessor.forward_log_det_jacobian(actions)
     if self._event_ndims == 1:
       log_probs = jnp.sum(log_probs, axis=-1)  # sum over action dimension
@@ -121,13 +122,26 @@ class CategoricalDistribution:
     self.logits = logits
 
   def sample(self, seed):
-    return jax.random.categorical(seed, logits=self.logits, keepdim=True)
+    idx = jax.random.categorical(seed, logits=self.logits)
+    out = jnp.zeros_like(self.logits)
+    if len(out.shape) ==2:
+      out.at[jnp.arange(out.shape[0]), idx].set(1.0)
+    elif len(out.shape) ==3:
+      i_idx = jnp.arange(out.shape[0])[:, None]  # (n, 1)
+      j_idx = jnp.arange(out.shape[1])[None, :]  # (1, m)
+      out.at[i_idx, j_idx, idx].set(1.0)
+    return out
 
   def mode(self):
-    return jnp.argmax(self.logits, axis=-1)
+    idx = jnp.argmax(self.logits, axis=-1)
+    out = jnp.zeros_like(self.logits)
+    out.at[jnp.arange(out.shape[0]), idx].set(1.0)
+    return out
 
   def log_prob(self, x):
-    return jnp.take_along_axis(self.logits, jnp.expand_dims(x, axis=-1), axis=-1)
+    print(x.shape, self.logits.shape)
+    idx = jnp.argmax(x, axis=-1)
+    return jnp.take_along_axis(self.logits, jnp.expand_dims(idx, axis=-1), axis=-1)
 
   def entropy(self):
     return - self.logits * jnp.log(self.logits)
@@ -153,7 +167,7 @@ class Identity:
     return x
   
   def forward_log_det_jacobian(self, x):
-    return x * 0.0
+    return 0.0
 
 
 
@@ -176,7 +190,7 @@ class NormalTanhDistribution(ParametricDistribution):
     # of the code operate on pre-tanh actions and we take the postprocessor
     # jacobian into account in log_prob computations.
     super().__init__(
-        param_size=2 * event_size,
+        param_size = 2 * event_size,
         postprocessor=TanhBijector(),
         event_ndims=1,
         reparametrizable=True)

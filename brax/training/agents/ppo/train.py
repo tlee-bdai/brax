@@ -106,6 +106,7 @@ def train(
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
     restore_checkpoint_path: Optional[str] = None,
+    discrete_action: bool = False
 ):
   """PPO training.
 
@@ -235,7 +236,9 @@ def train(
   ppo_network = network_factory(
       env_state.obs.shape[-1],
       env.action_size,
-      preprocess_observations_fn=normalize)
+      preprocess_observations_fn=normalize,
+      discrete_action = discrete_action
+      )
   make_policy = ppo_networks.make_inference_fn(ppo_network)
 
   optimizer = optax.adam(learning_rate=learning_rate)
