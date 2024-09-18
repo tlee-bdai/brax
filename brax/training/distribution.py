@@ -73,6 +73,8 @@ class ParametricDistribution(abc.ABC):
 
   def log_prob(self, parameters, actions):
     """Compute the log probability of actions."""
+    # if isinstance(parameters, tuple):
+    #   parameters = jnp.array(parameters)
     dist = self.create_dist(parameters)
     log_probs = dist.log_prob(actions)
     log_probs -= self._postprocessor.forward_log_det_jacobian(actions)
@@ -123,18 +125,20 @@ class CategoricalDistribution:
   def sample(self, seed):
     idx = jax.random.categorical(seed, logits=self.logits)
     out = jnp.zeros_like(self.logits)
+    if len(out.shape) ==1:
+      out = out.at[idx].set(1.0)
     if len(out.shape) ==2:
-      out.at[jnp.arange(out.shape[0]), idx].set(1.0)
+      out = out.at[jnp.arange(out.shape[0]), idx].set(1.0)
     elif len(out.shape) ==3:
       i_idx = jnp.arange(out.shape[0])[:, None]  # (n, 1)
       j_idx = jnp.arange(out.shape[1])[None, :]  # (1, m)
-      out.at[i_idx, j_idx, idx].set(1.0)
+      out = out.at[i_idx, j_idx, idx].set(1.0)
     return out
 
   def mode(self):
     idx = jnp.argmax(self.logits, axis=-1)
     out = jnp.zeros_like(self.logits)
-    out.at[jnp.arange(out.shape[0]), idx].set(1.0)
+    out = out.at[jnp.arange(out.shape[0]), idx].set(1.0)
     return out
 
   def log_prob(self, x):
@@ -142,7 +146,7 @@ class CategoricalDistribution:
     return jnp.take_along_axis(self.logits, jnp.expand_dims(idx, axis=-1), axis=-1)
 
   def entropy(self):
-    return - self.logits * jnp.log(self.logits)
+    return - self.logits * jnp.exp(self.logits)
 
 
 class TanhBijector:
@@ -208,6 +212,6 @@ class ParametricCategoricalDistribution(ParametricDistribution):
     super().__init__(param_size=event_size, postprocessor=Identity(), event_ndims=1,reparametrizable=True )
 
   def create_dist(self, parameters):
-    return CategoricalDistribution(jax.nn.softmax(parameters))
+    return CategoricalDistribution(jnp.log(jax.nn.softmax(parameters)) )
 
   

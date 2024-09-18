@@ -91,21 +91,40 @@ def make_policy_network(
     hidden_layer_sizes: Sequence[int] = (256, 256),
     activation: ActivationFn = linen.relu,
     kernel_init: Initializer = jax.nn.initializers.lecun_uniform(),
-    layer_norm: bool = False) -> FeedForwardNetwork:
+    layer_norm: bool = False,
+    spectral_norm_actor = False) -> FeedForwardNetwork:
   """Creates a policy network."""
-  policy_module = MLP(
+  if spectral_norm_actor:
+    policy_module = SNMLP(
       layer_sizes=list(hidden_layer_sizes) + [param_size],
       activation=activation,
       kernel_init=kernel_init,
-      layer_norm=layer_norm)
+    )
+  else:
+    policy_module = MLP(
+        layer_sizes=list(hidden_layer_sizes) + [param_size],
+        activation=activation,
+        kernel_init=kernel_init,
+        layer_norm=layer_norm)
 
-  def apply(processor_params, policy_params, obs):
+  def apply(processor_params, policy_params, obs, rngs=None):
     obs = preprocess_observations_fn(obs, processor_params)
-    return policy_module.apply(policy_params, obs)
+    logits = policy_module.apply(policy_params, obs, rngs=rngs, mutable=['sing_vec'])
+    if isinstance(logits, tuple):
+      logits = logits[0]
+    return logits
 
   dummy_obs = jnp.zeros((1, obs_size))
-  return FeedForwardNetwork(
-      init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
+  if spectral_norm_actor:
+    return FeedForwardNetwork(
+        init=lambda rng1, rng2: policy_module.init({
+            'params': rng1,
+            'sing_vec': rng2
+        }, dummy_obs),
+        apply=apply)
+  else:
+    return FeedForwardNetwork(
+        init=lambda key: policy_module.init(key, dummy_obs), apply=apply)
 
 
 def make_value_network(

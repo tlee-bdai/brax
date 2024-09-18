@@ -131,8 +131,9 @@ def compute_ppo_loss(
 
   # Put the time dimension first.
   data = jax.tree_util.tree_map(lambda x: jnp.swapaxes(x, 0, 1), data)
+  rng, key_sing_vec = jax.random.split(rng)
   policy_logits = policy_apply(normalizer_params, params.policy,
-                               data.observation)
+                               data.observation, rngs={'sing_vec': key_sing_vec})
 
   baseline = value_apply(normalizer_params, params.value, data.observation)
 

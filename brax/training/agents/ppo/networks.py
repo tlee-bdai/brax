@@ -22,7 +22,7 @@ from brax.training import types
 from brax.training.types import PRNGKey
 import flax
 from flax import linen
-
+import jax
 
 @flax.struct.dataclass
 class PPONetworks:
@@ -41,7 +41,10 @@ def make_inference_fn(ppo_networks: PPONetworks):
 
     def policy(observations: types.Observation,
                key_sample: PRNGKey) -> Tuple[types.Action, types.Extra]:
-      logits = policy_network.apply(*params, observations)
+      key_sample, key_sing_vec = jax.random.split(key_sample)
+      logits= policy_network.apply(*params, observations, rngs={'sing_vec': key_sing_vec})
+      if isinstance(logits, tuple):
+        logits = logits[0]
       if deterministic:
         return ppo_networks.parametric_action_distribution.mode(logits), {}
       raw_actions = parametric_action_distribution.sample_no_postprocessing(
@@ -67,16 +70,18 @@ def make_ppo_networks(
     policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
     value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
     activation: networks.ActivationFn = linen.swish,
-    discrete_action = False) -> PPONetworks:
+    discrete_action = False,
+    spectral_norm_actor = False) -> PPONetworks:
   """Make PPO networks with preprocessor."""
   if discrete_action:
     parametric_action_distribution = distribution.ParametricCategoricalDistribution(event_size=action_size)
     policy_network = networks.make_policy_network(
-      parametric_action_distribution.param_size,
-      observation_size,
-      preprocess_observations_fn=preprocess_observations_fn,
-      hidden_layer_sizes=policy_hidden_layer_sizes,
-      activation=activation)
+        parametric_action_distribution.param_size,
+        observation_size,
+        preprocess_observations_fn=preprocess_observations_fn,
+        hidden_layer_sizes=policy_hidden_layer_sizes,
+        activation=activation,
+        spectral_norm_actor = spectral_norm_actor)
   else:
     parametric_action_distribution = distribution.NormalTanhDistribution(
         event_size=action_size)

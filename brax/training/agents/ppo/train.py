@@ -106,7 +106,8 @@ def train(
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
     restore_checkpoint_path: Optional[str] = None,
-    discrete_action: bool = False
+    discrete_action: bool = False,
+    spectral_norm_actor: bool = False,
 ):
   """PPO training.
 
@@ -237,7 +238,8 @@ def train(
       env_state.obs.shape[-1],
       env.action_size,
       preprocess_observations_fn=normalize,
-      discrete_action = discrete_action
+      discrete_action = discrete_action,
+      spectral_norm_actor = spectral_norm_actor
       )
   make_policy = ppo_networks.make_inference_fn(ppo_network)
 
@@ -373,10 +375,17 @@ def train(
     return training_state, env_state, metrics  # pytype: disable=bad-return-type  # py311-upgrade
 
   # Initialize model params and training state.
-  init_params = ppo_losses.PPONetworkParams(
+  if spectral_norm_actor:
+    key_policy, key_policy2 = jax.random.split(key_policy)
+    init_params = ppo_losses.PPONetworkParams(
+      policy=ppo_network.policy_network.init(key_policy, key_policy2),
+      value=ppo_network.value_network.init(key_value),
+    )
+  else:
+    init_params = ppo_losses.PPONetworkParams(
       policy=ppo_network.policy_network.init(key_policy),
       value=ppo_network.value_network.init(key_value),
-  )
+    )
 
   training_state = TrainingState(  # pytype: disable=wrong-arg-types  # jax-ndarray
       optimizer_state=optimizer.init(init_params),  # pytype: disable=wrong-arg-types  # numpy-scalars
@@ -479,6 +488,7 @@ def train(
 
   # If there was no mistakes the training_state should still be identical on all
   # devices.
+  print(training_state)
   pmap.assert_is_replicated(training_state)
   params = _unpmap(
       (training_state.normalizer_params, training_state.params.policy))
