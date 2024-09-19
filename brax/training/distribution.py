@@ -148,6 +148,32 @@ class CategoricalDistribution:
   def entropy(self):
     return - self.logits * jnp.exp(self.logits)
 
+class CompCatNormalDistribution:
+  def __init__(self, logits, loc, scale):
+    self.categorical_dist = CategoricalDistribution(logits)
+    self.normal_dist = NormalDistribution(loc, scale)
+    self.dim_c = logits.shape[0]
+    self.dim_n = loc.shape[0]
+  
+  def sample(self):
+    x_c = self.categorical_dist.sample()
+    x_n = self.normal_dist.sample()
+    return jnp.concatenate([x_c, x_n], axis=-1)
+
+  def mode(self):
+    x_c = self.categorical_dist.mode()
+    x_n = self.normal_dist.mode()
+    return jnp.concatenate([x_c, x_n], axis=-1)
+
+  def log_prob(self, x):
+    x_c = jax.lax.slice_in_dim(x, 0, self.dim_c, axis=-1) 
+    x_n = jax.lax.slice_in_dim(x, self.dim_c, self.dim_c + self.dim_n, axis=-1) 
+    log_prob_c = self.categorical_dist.log_prob(x_c)
+    log_prob_n = self.categorical_dist.log_prob(x_n)
+    return log_prob_c + log_prob_n ## THIS IS PROBLEMATIC.. AS LOG_PROB_C IS PROBABILITY AND LOG_PROB_N IS PROB. DENSITY
+
+  def entropy(self):
+    return ## DIFFERENTIAL ENTROPY + ENTROPY IS NOT WELL DEFINED I THINK..
 
 class TanhBijector:
   """Tanh Bijector."""

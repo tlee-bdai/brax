@@ -30,6 +30,7 @@ from brax.envs import pusher
 from brax.envs import reacher
 from brax.envs import swimmer
 from brax.envs import walker2d
+from brax.envs import urm
 from brax.envs.base import Env, PipelineEnv, State, Wrapper
 from brax.envs.wrappers import training
 
@@ -46,6 +47,8 @@ _envs = {
     'reacher': reacher.Reacher,
     'swimmer': swimmer.Swimmer,
     'walker2d': walker2d.Walker2d,
+    'urm2arm_binary': urm.TwoArmBinary,
+    'urm2arm_prop': urm.TwoArmProp
 }
 
 
