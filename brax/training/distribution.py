@@ -279,6 +279,7 @@ class CompCatNormalTanhDisribution(ParametricDistribution):
   
   def create_dist(self, parameters):
     logits = jax.lax.slice_in_dim(parameters, 0, self.dim_c, axis=-1)
+    logits = jnp.log(jax.nn.softmax(logits))
     loc_scale = jax.lax.slice_in_dim(parameters, self.dim_c, self.dim_c + self.dim_n * 2, axis=-1)
     loc, scale = jnp.split(loc_scale, 2, axis=-1)
     scale = (jax.nn.softplus(scale) + self._min_std) * self._var_scale

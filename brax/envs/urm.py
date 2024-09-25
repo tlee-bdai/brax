@@ -30,7 +30,7 @@ class TwoArmBinary(PipelineEnv):
         <compiler angle="radian" />
         <option  timestep="0.001" gravity="0 0 0"/>
         <default>
-          <geom solref="0.002 1" contype="1" conaffinity="1" friction="0.3 0.005 0.0001" />
+          <geom solref="0.002 1" contype="1" conaffinity="1" friction="1.0 0.005 0.0001" />
           <joint  armature="0.01" range="-{5} {5}"/>
         </default>
         <visual>
@@ -68,9 +68,9 @@ class TwoArmBinary(PipelineEnv):
             </body>
             </body>
             <body name="obj" pos="0 {4} 0.0">
-              <joint type="slide" axis="1 0 0"/>
-              <joint type="slide" axis="0 1 0"/>
-              <joint type="hinge" axis="0 0 1"/>
+              <joint type="slide" axis="1 0 0" />
+              <joint type="slide" axis="0 1 0" />
+              <joint type="hinge" axis="0 0 1" />
               <!-- <geom type="capsule" size="{4} 0.025" pos="0 0 0"/> -->
               <geom type="box" size="{4} {4} 0.025" pos="0 0 0"/> 
               <!-- <geom type="box" size="{4} 0.01 0.025" pos="0 0 0"/> -->
@@ -145,7 +145,7 @@ class TwoArmBinary(PipelineEnv):
     kp = 10.0
 
     f = kp* (jp.dot(e,(e * self.q_limit  - q - 2 * np.sqrt([0.01/kp]) * v)))
-    f = jp.clip(f, -10.0, 10.0)
+    f = jp.clip(f, -5.0, 5.0)
     w = 0.1
     return w, e, f
 
@@ -205,7 +205,8 @@ class TwoArmBinary(PipelineEnv):
     state.metrics.update(
         reward = reward,
         y_reward = y_reward,
-        x_reward = x_reward
+        x_reward = x_reward,
+        theta_reward = theta_reward
     )
 
     return state.replace(
@@ -247,9 +248,9 @@ class TwoArmProp(PipelineEnv):
     xml = '''
     <mujoco>
         <compiler angle="radian" />
-        <option  timestep="0.001" gravity="0 0 0"/>
+        <option  timestep="0.001" gravity="0 0 -9.81"/>
         <default>
-        <geom solref="0.002 1" contype="1" conaffinity="1" friction="0.3 0.005 0.0001" />
+        <geom solref="0.002 1" contype="1" conaffinity="1" friction="1.0 0.005 0.0001" />
         <joint  armature="0.01"/>
         </default>
         <visual>
@@ -289,7 +290,7 @@ class TwoArmProp(PipelineEnv):
             <body name="obj" pos="0 {4} 0.0">
             <joint type="slide" axis="1 0 0"/>
             <joint type="slide" axis="0 1 0"/>
-            <joint type="hinge" axis="0 0 1"/>
+            <joint type="hinge" axis="0 0 1"/>    
             <!-- <geom type="capsule" size="{4} 0.025" pos="0 0 0"/> -->
             <geom type="box" size="{4} {4} 0.025" pos="0 0 0"/>
             <!-- <geom type="box" size="{4} 0.01 0.025" pos="0 0 0"/> -->
@@ -353,8 +354,8 @@ class TwoArmProp(PipelineEnv):
     # ctrl.at[:4] = e * f
     # ctrl.at[4:8] = jp.abs(v) * w
     # return ctrl
-    return jp.concatenate([e*f, jp.abs(v) * w])
     # return jp.concatenate([e*f, w])
+    return jp.concatenate([e*f, jp.abs(v) * w])
   
   # def controller(self, d, e_idx, q_target):
   def controller(self, d, action):
@@ -373,10 +374,10 @@ class TwoArmProp(PipelineEnv):
     kp = 10.0
 
     f = kp* (jp.dot(e,(e * (self.q_limit_u - self.q_limit_l) * 0.5 + (self.q_limit_l + self.q_limit_u) * 0.5  - q - 2 * np.sqrt([0.01/kp]) * v)))
-    f = jp.clip(f, -3.0, 3.0)
+    f = jp.clip(f, -5.0, 5.0)
     w_mag = 0.1
-    w = w_mag # w = w_mag / jp.abs(q_wall - q)
-    
+    # w = w_mag / jp.abs(q_wall - q)
+    w= w_mag
     return w, e, f
 
   def reset(self, rng: jp.ndarray) -> State:
@@ -435,7 +436,8 @@ class TwoArmProp(PipelineEnv):
     state.metrics.update(
         reward = reward,
         y_reward = y_reward,
-        x_reward = x_reward
+        x_reward = x_reward,
+        theta_reward = theta_reward,
     )
 
     return state.replace(

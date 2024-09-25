@@ -42,6 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from orbax import checkpoint as ocp
+import wandb
 
 
 InferenceParams = Tuple[running_statistics.NestedMeanStd, Params]
@@ -447,7 +448,8 @@ def train(
         training_metrics={})
     logging.info(metrics)
     progress_fn(0, metrics)
-
+    wandb.log(metrics)
+    
   training_metrics = {}
   training_walltime = 0
   current_step = 0
@@ -477,6 +479,7 @@ def train(
           training_metrics)
       logging.info(metrics)
       progress_fn(current_step, metrics)
+      wandb.log(metrics)
       params = _unpmap(
           (training_state.normalizer_params, training_state.params)
       )
