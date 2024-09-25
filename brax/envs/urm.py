@@ -145,6 +145,7 @@ class TwoArmBinary(PipelineEnv):
     kp = 10.0
 
     f = kp* (jp.dot(e,(e * self.q_limit  - q - 2 * np.sqrt([0.01/kp]) * v)))
+    f = jp.clip(f, -10.0, 10.0)
     w = 0.1
     return w, e, f
 
@@ -347,22 +348,24 @@ class TwoArmProp(PipelineEnv):
     )
   
   def transmission(self, d, w, e, f):
-    # v = d.qvel[0:4]
+    v = d.qvel[0:4]
     # ctrl = jp.zeros(self.sys.nu)
     # ctrl.at[:4] = e * f
     # ctrl.at[4:8] = jp.abs(v) * w
     # return ctrl
-    # return jp.concatenate([e*f, jp.abs(v) * w])
-    return jp.concatenate([e*f, w])
+    return jp.concatenate([e*f, jp.abs(v) * w])
+    # return jp.concatenate([e*f, w])
   
   # def controller(self, d, e_idx, q_target):
   def controller(self, d, action):
     # idx = jp.argmax(action.at[0:4])
     # e = self.e_list[idx].squeeze()
-    e = jax.lax.slice_in_dim(action, 0, 4)
-    e = jp.sign(e)
+    e = jax.lax.slice_in_dim(action, 0, 16)
+    idx = jp.argmax(e)
+    e = self.e_list[idx].squeeze()
 
-    q_wall = jax.lax.slice_in_dim(action, 4, 8)
+
+    q_wall = jax.lax.slice_in_dim(action, 16, 20)
     q_wall = q_wall * (self.q_limit_u - self.q_limit_l) * 0.5 + (self.q_limit_l + self.q_limit_u) * 0.5
 
     q = d.qpos[0:4]
@@ -370,9 +373,9 @@ class TwoArmProp(PipelineEnv):
     kp = 10.0
 
     f = kp* (jp.dot(e,(e * (self.q_limit_u - self.q_limit_l) * 0.5 + (self.q_limit_l + self.q_limit_u) * 0.5  - q - 2 * np.sqrt([0.01/kp]) * v)))
-    f = jp.clip(f, 0.0, 3.0)
-    w_mag = 0.2
-    w = w_mag / jp.abs(q_wall - q)
+    f = jp.clip(f, -3.0, 3.0)
+    w_mag = 0.1
+    w = w_mag # w = w_mag / jp.abs(q_wall - q)
     
     return w, e, f
 
@@ -402,7 +405,7 @@ class TwoArmProp(PipelineEnv):
 
   @property
   def action_size(self) -> int:
-    return 8
+    return 2**4 + 4
 
   @property
   def dt(self) -> float:

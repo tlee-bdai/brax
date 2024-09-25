@@ -152,12 +152,13 @@ class CompCatNormalDistribution:
   def __init__(self, logits, loc, scale):
     self.categorical_dist = CategoricalDistribution(logits)
     self.normal_dist = NormalDistribution(loc, scale)
-    self.dim_c = logits.shape[0]
-    self.dim_n = loc.shape[0]
+    self.dim_c = logits.shape[-1]
+    self.dim_n = loc.shape[-1]
   
-  def sample(self):
-    x_c = self.categorical_dist.sample()
-    x_n = self.normal_dist.sample()
+  def sample(self, seed):
+    seed_c, seed_n = jax.random.split(seed)
+    x_c = self.categorical_dist.sample(seed_c)
+    x_n = self.normal_dist.sample(seed_n)
     return jnp.concatenate([x_c, x_n], axis=-1)
 
   def mode(self):
@@ -169,11 +170,13 @@ class CompCatNormalDistribution:
     x_c = jax.lax.slice_in_dim(x, 0, self.dim_c, axis=-1) 
     x_n = jax.lax.slice_in_dim(x, self.dim_c, self.dim_c + self.dim_n, axis=-1) 
     log_prob_c = self.categorical_dist.log_prob(x_c)
-    log_prob_n = self.categorical_dist.log_prob(x_n)
-    return log_prob_c + log_prob_n ## THIS IS PROBLEMATIC.. AS LOG_PROB_C IS PROBABILITY AND LOG_PROB_N IS PROB. DENSITY
+    log_prob_n = self.normal_dist.log_prob(x_n)
+    return jnp.concatenate([log_prob_c, log_prob_n], axis=-1) ## THIS IS PROBLEMATIC.. AS LOG_PROB_C IS PROBABILITY AND LOG_PROB_N IS PROB. DENSITY
 
   def entropy(self):
-    return ## DIFFERENTIAL ENTROPY + ENTROPY IS NOT WELL DEFINED I THINK..
+    ent_c = jnp.sum(self.categorical_dist.entropy(), axis=-1, keepdims=True)
+    ent_n = self.normal_dist.entropy()
+    return jnp.concatenate([ent_c, ent_n], axis=-1) ## DIFFERENTIAL ENTROPY + ENTROPY IS NOT WELL DEFINED I THINK..
 
 class TanhBijector:
   """Tanh Bijector."""
@@ -196,6 +199,26 @@ class Identity:
   
   def forward_log_det_jacobian(self, x):
     return 0.0
+  
+class CompIdTanh:
+  def __init__(self, dim_c, dim_n):
+    self.dim_c = dim_c
+    self.dim_n = dim_n
+
+  def forward(self, x):
+    x_c = jax.lax.slice_in_dim(x, 0, self.dim_c, axis=-1) 
+    x_n = jax.lax.slice_in_dim(x, self.dim_c, self.dim_c + self.dim_n, axis=-1)
+    return jnp.concatenate([x_c, jnp.tanh(x_n)], axis=-1)
+  
+  def inverse(self, y):
+    y_c = jax.lax.slice_in_dim(y, 0, self.dim_c, axis=-1) 
+    y_n = jax.lax.slice_in_dim(y, self.dim_c, self.dim_c + self.dim_n, axis=-1)
+    return jnp.concatenate([y_c, jnp.arctanh(y_n)], axis=-1)
+  
+  def forward_log_det_jacobian(self, x):
+    x_c_dummy = jax.lax.slice_in_dim(x, 0, 1, axis=-1) 
+    x_n = jax.lax.slice_in_dim(x, self.dim_c, self.dim_c + self.dim_n, axis=-1)
+    return jnp.concatenate([x_c_dummy * 0.0,  2. * (jnp.log(2.) - x_n - jax.nn.softplus(-2. * x_n))], axis=-1)
 
 
 
@@ -240,4 +263,23 @@ class ParametricCategoricalDistribution(ParametricDistribution):
   def create_dist(self, parameters):
     return CategoricalDistribution(jnp.log(jax.nn.softmax(parameters)) )
 
+class CompCatNormalTanhDisribution(ParametricDistribution):
+
+  def __init__(self, dim_c, dim_n, min_std=0.001, var_scale=1):
+    super().__init__(
+      param_size = dim_c + dim_n * 2,
+      postprocessor=CompIdTanh(dim_c, dim_n),
+      event_ndims=1,
+      reparametrizable=True
+    )
+    self.dim_c = dim_c
+    self.dim_n = dim_n
+    self._min_std = min_std
+    self._var_scale = var_scale
   
+  def create_dist(self, parameters):
+    logits = jax.lax.slice_in_dim(parameters, 0, self.dim_c, axis=-1)
+    loc_scale = jax.lax.slice_in_dim(parameters, self.dim_c, self.dim_c + self.dim_n * 2, axis=-1)
+    loc, scale = jnp.split(loc_scale, 2, axis=-1)
+    scale = (jax.nn.softplus(scale) + self._min_std) * self._var_scale
+    return CompCatNormalDistribution(logits, loc, scale)

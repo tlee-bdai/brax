@@ -75,6 +75,7 @@ def make_ppo_networks(
   """Make PPO networks with preprocessor."""
   if discrete_action:
     parametric_action_distribution = distribution.ParametricCategoricalDistribution(event_size=action_size)
+    # parametric_action_distribution = distribution.CompCatNormalTanhDisribution(dim_c=16, dim_n=4)
     policy_network = networks.make_policy_network(
         parametric_action_distribution.param_size,
         observation_size,
