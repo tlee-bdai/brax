@@ -15,13 +15,13 @@ class TwoArmBinary(PipelineEnv):
       healthy_reward=5.0,
       terminate_when_unhealthy=True,
       healthy_z_range=(1.0, 2.0),
-      reset_noise_scale=1e-2,
+      reset_noise_scale=1e-1,
       exclude_current_positions_from_observation=True,
       **kwargs,
   ):
-    d = 0.15
+    d = 0.24
     l1, l2 = 0.14, 0.14
-    bs = 0.15
+    bs = 0.1
     q_limit = 2.5
     savevideo =False
 
@@ -46,12 +46,12 @@ class TwoArmBinary(PipelineEnv):
         </asset>
 
         <worldbody>
-            <geom name="floor" type="plane" size=".4 .4 0.01" material="grid" pos="0 0.2 -0.025"/>
+            <geom name="floor" type="plane" size=".4 .4 0.01" material="grid" pos="0 0.2 -0.026"/>
             <camera name="top" pos="0 0 1.0" resolution="1280 1280"/>
             <body name="robot">
             <geom name="base" type="capsule" size="0.01" fromto="-{3} -0.02 0 {3} -0.02 0" />
             <body name="R1" pos="{0} 0 0.0">
-                <geom type="capsule" size="0.01" fromto="0 0 0 0 {1} 0" rgba="0 0 0 1"/>
+                <geom type="capsule" size="0.01" fromto="0 0 0 0 {1} 0" rgba="0 0 0 1" />
                 <joint name="R1j" type="hinge" pos="0 0 0" axis="0 0 1" />
                 <body name="R2" pos="0 {1} 0">
                     <geom type="capsule" size="0.01" fromto="0 0 0 0 {2} 0" />
@@ -68,9 +68,9 @@ class TwoArmBinary(PipelineEnv):
             </body>
             </body>
             <body name="obj" pos="0 {4} 0.0">
-              <joint type="slide" axis="1 0 0" />
-              <joint type="slide" axis="0 1 0" />
-              <joint type="hinge" axis="0 0 1" />
+              <joint type="slide" axis="1 0 0" damping="3" />
+              <joint type="slide" axis="0 1 0" damping="3"/>
+              <joint type="hinge" axis="0 0 1" damping="0.1"/>
               <!-- <geom type="capsule" size="{4} 0.025" pos="0 0 0"/> -->
               <geom type="box" size="{4} {4} 0.025" pos="0 0 0"/> 
               <!-- <geom type="box" size="{4} 0.01 0.025" pos="0 0 0"/> -->
@@ -133,7 +133,7 @@ class TwoArmBinary(PipelineEnv):
     # ctrl.at[:4] = e * f
     # ctrl.at[4:8] = jp.abs(v) * w
     # return ctrl
-    return jp.concatenate([e*f, jp.abs(v) * w])
+    return jp.concatenate([e*f, jp.ones_like(v) * w])
   
   # def controller(self, d, e_idx, q_target):
   def controller(self, d, action):
@@ -142,26 +142,62 @@ class TwoArmBinary(PipelineEnv):
 
     q = d.qpos[0:4]
     v = d.qvel[0:4]
-    kp = 10.0
+    kp = 5.0
 
-    f = kp* (jp.dot(e,(e * self.q_limit  - q - 2 * np.sqrt([0.01/kp]) * v)))
-    f = jp.clip(f, -5.0, 5.0)
-    w = 0.1
+    # f = kp* (jp.dot(e,(e * self.q_limit  - q - 2 * np.sqrt([0.01/kp]) * v)))
+    f = kp *(jp.dot(e, 6*e - v))
+    # f = jp.clip(f, -10.0, 10.0)
+    w = 0.0
     return w, e, f
 
   def reset(self, rng: jp.ndarray) -> State:
     """Resets the environment to an initial state."""
-    rng, rng1, rng2 = jax.random.split(rng, 3)
+    # while True:
+    #   rng, rng1, rng2 = jax.random.split(rng, 3)
 
-    low, hi = -self._reset_noise_scale, self._reset_noise_scale
-    qpos = self.sys.qpos0 + 0.0 * jax.random.uniform(
-        rng1, (self.sys.nq,), minval=low, maxval=hi
-    )
-    qvel = 0.0 * jax.random.uniform(
-        rng2, (self.sys.nv,), minval=low, maxval=hi
-    )
+    #   low, hi = -self._reset_noise_scale, self._reset_noise_scale
+    #   low = jax.numpy.array([-2.5]*4 + [-0.1, 0.0, -np.pi])
+    #   hi = jax.numpy.array([2.5]*4 + [0.1, 0.1, np.pi])
+    #   qpos = self.sys.qpos0 +  1.0 * jax.random.uniform(
+    #       rng1, (self.sys.nq,), minval=low, maxval=hi
+    #   )
+    #   qvel = 0.0 * jax.random.uniform(
+    #       rng2, (self.sys.nv,), minval=low, maxval=hi
+    #   )
 
-    data = self.pipeline_init(qpos, qvel)
+    #   data = self.pipeline_init(qpos, qvel)
+    #   # print("NUMBER OF CONTACTS", data.ncon)
+    #   # print(data.contact.dist)
+    #   if jax.numpy.all(jax.numpy.greater(data.contact.dist, jax.numpy.zeros_like(data.contact.dist))):
+    #     break
+    # # for i in range(data.ncon):
+    # #   contact = data.contact
+    # #   print(contact.geom1, contact.geom2)
+    def condition_fn(data):
+      # This is the condition for the while loop using jax.numpy
+      return jp.all(jp.greater(data.contact.dist, jp.zeros_like(data.contact.dist)))
+    
+    def reset_loop_body(args):
+      rng, rng1, rng2 = jax.random.split(args[0], 3)
+
+      low = jp.array([-2.5] * 4 + [-0.1, 0.0, -np.pi*0.001])
+      hi = jp.array([2.5] * 4 + [0.1, 0.1, np.pi*0.001])
+      qpos = jax.random.uniform(
+          rng1, (self.sys.nq,), minval=low, maxval=hi
+      )
+      qvel = jax.random.uniform(
+          rng2, (self.sys.nv,), minval=low, maxval=hi
+      ) * 0.0
+
+      data = self.pipeline_init(qpos, qvel)
+      return (rng, rng1, rng2, data)
+
+    rng, rng1, rng2, data = reset_loop_body((rng, None, None))
+
+    # Using lax.while_loop to avoid Python-native control flow
+    cond = lambda args: ~condition_fn(args[-1])  # Continue until the condition is True
+    rng, rng1, rng2, data = jax.lax.while_loop(cond, reset_loop_body, (rng, rng1, rng2, data))
+
 
     obs = self._get_obs(data, jp.zeros(self.sys.nu))
     reward, done, zero = jp.zeros(3)
@@ -176,6 +212,14 @@ class TwoArmBinary(PipelineEnv):
   @property
   def action_size(self) -> int:
     return 16
+  
+  @property
+  def discrete_action_size(self) -> int:
+    return 16
+  
+  @property
+  def cont_action_size(self) -> int:
+    return 0
 
   @property
   def dt(self) -> float:
@@ -200,7 +244,7 @@ class TwoArmBinary(PipelineEnv):
     x_reward = -data.qpos[4] * data.qpos[4]
     y_reward = -data.qpos[5] * data.qpos[5]
     theta_reward = -(data.qpos[6] - 1.57) * (data.qpos[6] - 1.57)
-    reward =  theta_reward + 10.0 * y_reward# forward_reward + healthy_reward - ctrl_cost
+    reward =  theta_reward + 100.0 * y_reward + 100* x_reward # forward_reward + healthy_reward - ctrl_cost
     done = 0.0
     state.metrics.update(
         reward = reward,
@@ -220,7 +264,7 @@ class TwoArmBinary(PipelineEnv):
     # external_contact_forces are excluded
     return jp.concatenate([
         data.qpos,
-        data.qvel
+        # data.qvel
     ])
 
 
@@ -242,8 +286,10 @@ class TwoArmProp(PipelineEnv):
     d = 0.15
     l1, l2 = 0.14, 0.14
     bs = 0.15
-    q_limit_l = jp.array([-jp.pi/2, -2.5, -jp.pi/2, -2.5])
-    q_limit_u = jp.array([jp.pi/2, 2.5, jp.pi/2, 2.5])
+    # q_limit_l = jp.array([-jp.pi/2, -2.5, -jp.pi/2, -2.5])
+    q_limit_l = jp.array([-2.5]*4)
+    # q_limit_u = jp.array([jp.pi/2, 2.5, jp.pi/2, 2.5])
+    q_limit_u = jp.array([2.5]*4)
 
     xml = '''
     <mujoco>
@@ -355,18 +401,18 @@ class TwoArmProp(PipelineEnv):
     # ctrl.at[4:8] = jp.abs(v) * w
     # return ctrl
     # return jp.concatenate([e*f, w])
-    return jp.concatenate([e*f, jp.abs(v) * w])
+    return jp.concatenate([e*f, jp.ones_like(v) * w])
   
   # def controller(self, d, e_idx, q_target):
   def controller(self, d, action):
     # idx = jp.argmax(action.at[0:4])
     # e = self.e_list[idx].squeeze()
-    e = jax.lax.slice_in_dim(action, 0, 16)
+    e = jax.lax.slice_in_dim(action, 0, 16, axis=-1)
     idx = jp.argmax(e)
     e = self.e_list[idx].squeeze()
 
 
-    q_wall = jax.lax.slice_in_dim(action, 16, 20)
+    q_wall = jax.lax.slice_in_dim(action, 16, 20, axis=-1)
     q_wall = q_wall * (self.q_limit_u - self.q_limit_l) * 0.5 + (self.q_limit_l + self.q_limit_u) * 0.5
 
     q = d.qpos[0:4]
@@ -374,7 +420,7 @@ class TwoArmProp(PipelineEnv):
     kp = 10.0
 
     f = kp* (jp.dot(e,(e * (self.q_limit_u - self.q_limit_l) * 0.5 + (self.q_limit_l + self.q_limit_u) * 0.5  - q - 2 * np.sqrt([0.01/kp]) * v)))
-    f = jp.clip(f, -5.0, 5.0)
+    f = jp.clip(f, -10.0, 10.0)
     w_mag = 0.1
     # w = w_mag / jp.abs(q_wall - q)
     w= w_mag
@@ -385,6 +431,7 @@ class TwoArmProp(PipelineEnv):
     rng, rng1, rng2 = jax.random.split(rng, 3)
 
     low, hi = -self._reset_noise_scale, self._reset_noise_scale
+    
     qpos = self.sys.qpos0 + 0.0 * jax.random.uniform(
         rng1, (self.sys.nq,), minval=low, maxval=hi
     )
@@ -407,6 +454,14 @@ class TwoArmProp(PipelineEnv):
   @property
   def action_size(self) -> int:
     return 2**4 + 4
+
+  @property
+  def discrete_action_size(self) -> int:
+    return 16
+  
+  @property
+  def cont_action_size(self) -> int:
+    return 4
 
   @property
   def dt(self) -> float:

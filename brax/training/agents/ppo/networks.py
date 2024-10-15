@@ -64,34 +64,36 @@ def make_inference_fn(ppo_networks: PPONetworks):
 
 def make_ppo_networks(
     observation_size: int,
-    action_size: int,
+    # action_size: int,
+    dim_c: int,
+    dim_n: int,
     preprocess_observations_fn: types.PreprocessObservationFn = types
     .identity_observation_preprocessor,
-    policy_hidden_layer_sizes: Sequence[int] = (32,) * 4,
+    policy_hidden_layer_sizes: Sequence[int] = (256,) * 4,
     value_hidden_layer_sizes: Sequence[int] = (256,) * 5,
     activation: networks.ActivationFn = linen.swish,
-    discrete_action = False,
     spectral_norm_actor = False) -> PPONetworks:
   """Make PPO networks with preprocessor."""
-  if discrete_action:
-    parametric_action_distribution = distribution.ParametricCategoricalDistribution(event_size=action_size)
-    # parametric_action_distribution = distribution.CompCatNormalTanhDisribution(dim_c=16, dim_n=4)
-    policy_network = networks.make_policy_network(
-        parametric_action_distribution.param_size,
-        observation_size,
-        preprocess_observations_fn=preprocess_observations_fn,
-        hidden_layer_sizes=policy_hidden_layer_sizes,
-        activation=activation,
-        spectral_norm_actor = spectral_norm_actor)
+  if dim_n ==0:
+    parametric_action_distribution = distribution.ParametricCategoricalDistribution(event_size=dim_c)
   else:
-    parametric_action_distribution = distribution.NormalTanhDistribution(
-        event_size=action_size)
-    policy_network = networks.make_policy_network(
-        parametric_action_distribution.param_size,
-        observation_size,
-        preprocess_observations_fn=preprocess_observations_fn,
-        hidden_layer_sizes=policy_hidden_layer_sizes,
-        activation=activation)
+    parametric_action_distribution = distribution.CompCatNormalTanhDisribution(dim_c=dim_c, dim_n=dim_n)
+  policy_network = networks.make_policy_network(
+      parametric_action_distribution.param_size,
+      observation_size,
+      preprocess_observations_fn=preprocess_observations_fn,
+      hidden_layer_sizes=policy_hidden_layer_sizes,
+      activation=activation,
+      spectral_norm_actor = spectral_norm_actor)
+  # else:
+  #   parametric_action_distribution = distribution.NormalTanhDistribution(
+  #       event_size=action_size)
+  #   policy_network = networks.make_policy_network(
+  #       parametric_action_distribution.param_size,
+  #       observation_size,
+  #       preprocess_observations_fn=preprocess_observations_fn,
+  #       hidden_layer_sizes=policy_hidden_layer_sizes,
+  #       activation=activation)
   value_network = networks.make_value_network(
       observation_size,
       preprocess_observations_fn=preprocess_observations_fn,

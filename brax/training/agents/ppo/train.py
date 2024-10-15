@@ -107,7 +107,6 @@ def train(
         Callable[[base.System, jnp.ndarray], Tuple[base.System, base.System]]
     ] = None,
     restore_checkpoint_path: Optional[str] = None,
-    discrete_action: bool = False,
     spectral_norm_actor: bool = False,
 ):
   """PPO training.
@@ -237,9 +236,9 @@ def train(
     normalize = running_statistics.normalize
   ppo_network = network_factory(
       env_state.obs.shape[-1],
-      env.action_size,
+      dim_c = env.discrete_action_size,
+      dim_n = env.cont_action_size,
       preprocess_observations_fn=normalize,
-      discrete_action = discrete_action,
       spectral_norm_actor = spectral_norm_actor
       )
   make_policy = ppo_networks.make_inference_fn(ppo_network)

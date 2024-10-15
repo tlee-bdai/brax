@@ -114,7 +114,7 @@ class NormalDistribution:
   def entropy(self):
     log_normalization = 0.5 * jnp.log(2. * jnp.pi) + jnp.log(self.scale)
     entropy = 0.5 + log_normalization
-    return entropy * jnp.ones_like(self.loc)
+    return entropy #* jnp.ones_like(self.loc)
 
 class CategoricalDistribution:
   """Categorical distribution."""
@@ -258,7 +258,7 @@ class ParametricCategoricalDistribution(ParametricDistribution):
   """Categorical Distribution with Softmax"""
 
   def __init__(self, event_size):
-    super().__init__(param_size=event_size, postprocessor=Identity(), event_ndims=1,reparametrizable=True )
+    super().__init__(param_size=event_size, postprocessor=Identity(), event_ndims=1,reparametrizable=True)
 
   def create_dist(self, parameters):
     return CategoricalDistribution(jnp.log(jax.nn.softmax(parameters)) )
